@@ -2,6 +2,10 @@
 
 Control Claude Code CLI on your Mac from anywhere — via an iOS app or a web browser.
 
+<p align="center">
+  <img src="docs/ios-terminal.png" alt="Reb iOS App — Claude Code CLI running on iPhone" width="300">
+</p>
+
 ```
 ┌──────────────┐                        ┌──────────────────┐
 │  iOS App /   │   WebSocket (binary)   │  Mac Mini Server  │
