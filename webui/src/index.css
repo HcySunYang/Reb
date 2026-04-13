@@ -1,0 +1,10 @@
+@import "tailwindcss";
+@import "@xterm/xterm/css/xterm.css";
+
+@theme {
+  --color-reb-red: #e94560;
+  --color-reb-red-hover: #c73650;
+  --color-reb-dark: #0d1117;
+  --color-reb-panel: #16213e;
+  --color-reb-border: #0f3460;
+}

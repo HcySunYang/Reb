@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/components/sessiontabs.tsx","./src/components/terminalview.tsx","./src/hooks/usewebsocket.ts","./src/lib/protocol.ts","./src/pages/connectpage.tsx","./src/pages/terminalpage.tsx","./src/stores/connectionstore.ts","./src/stores/sessionstore.ts"],"version":"5.9.3"}

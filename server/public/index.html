@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reb — Remote Agent Terminal</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Top bar */
+    #topbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 16px;
+      background: #16213e;
+      border-bottom: 1px solid #0f3460;
+      flex-shrink: 0;
+    }
+    #topbar .logo {
+      font-weight: 700;
+      font-size: 18px;
+      color: #e94560;
+      letter-spacing: 1px;
+    }
+    #topbar .status {
+      font-size: 13px;
+      padding: 3px 10px;
+      border-radius: 12px;
+      background: #333;
+    }
+    #topbar .status.connected { background: #1b4332; color: #95d5b2; }
+    #topbar .status.disconnected { background: #4a1525; color: #f4a0a0; }
+
+    .spacer { flex: 1; }
+
+    button {
+      padding: 6px 14px;
+      border: 1px solid #0f3460;
+      border-radius: 6px;
+      background: #16213e;
+      color: #e0e0e0;
+      cursor: pointer;
+      font-size: 13px;
+      transition: background 0.15s;
+    }
+    button:hover { background: #0f3460; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    button.danger { border-color: #e94560; color: #e94560; }
+    button.danger:hover { background: #4a1525; }
+    button.primary { background: #e94560; border-color: #e94560; color: #fff; }
+    button.primary:hover { background: #c73650; }
+
+    /* Connect panel */
+    #connect-panel {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+    }
+    #connect-form {
+      background: #16213e;
+      padding: 32px;
+      border-radius: 12px;
+      border: 1px solid #0f3460;
+      width: 380px;
+    }
+    #connect-form h2 {
+      margin-bottom: 20px;
+      color: #e94560;
+      font-size: 20px;
+    }
+    #connect-form label {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 4px;
+      color: #aaa;
+    }
+    #connect-form input {
+      width: 100%;
+      padding: 8px 12px;
+      margin-bottom: 14px;
+      border: 1px solid #0f3460;
+      border-radius: 6px;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      font-size: 14px;
+    }
+    #connect-form input:focus {
+      outline: none;
+      border-color: #e94560;
+    }
+    #connect-form .row {
+      display: flex;
+      gap: 12px;
+    }
+    #connect-form .row > div { flex: 1; }
+    #connect-form .row > div:first-child { flex: 2; }
+    #connect-error {
+      color: #e94560;
+      font-size: 13px;
+      margin-bottom: 10px;
+      display: none;
+    }
+
+    /* Session panel */
+    #session-panel {
+      display: none;
+      flex: 1;
+      flex-direction: column;
+    }
+
+    /* Session tabs */
+    #session-tabs {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 16px;
+      background: #111;
+      overflow-x: auto;
+      flex-shrink: 0;
+    }
+    .session-tab {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 6px 6px 0 0;
+      background: #1a1a2e;
+      cursor: pointer;
+      font-size: 13px;
+      border: 1px solid transparent;
+      border-bottom: none;
+      white-space: nowrap;
+    }
+    .session-tab.active {
+      background: #16213e;
+      border-color: #0f3460;
+      color: #fff;
+    }
+    .session-tab .close-tab {
+      font-size: 16px;
+      line-height: 1;
+      color: #666;
+      cursor: pointer;
+      padding: 0 2px;
+    }
+    .session-tab .close-tab:hover { color: #e94560; }
+
+    /* Terminal container */
+    #terminal-container {
+      flex: 1;
+      padding: 4px;
+      background: #000;
+      position: relative;
+    }
+    #terminal-container .xterm {
+      height: 100%;
+    }
+    .terminal-wrapper {
+      position: absolute;
+      top: 4px; left: 4px; right: 4px; bottom: 4px;
+      display: none;
+    }
+    .terminal-wrapper.active { display: block; }
+
+    /* Empty state */
+    #empty-state {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      color: #666;
+      font-size: 15px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Top Bar -->
+  <div id="topbar">
+    <span class="logo">REB</span>
+    <span id="conn-status" class="status disconnected">Disconnected</span>
+    <span class="spacer"></span>
+    <button id="btn-new-session" disabled>+ New Session</button>
+    <button id="btn-disconnect" class="danger" style="display:none">Disconnect</button>
+  </div>
+
+  <!-- Connect Panel -->
+  <div id="connect-panel">
+    <form id="connect-form" autocomplete="off">
+      <h2>Connect to Server</h2>
+      <div class="row">
+        <div>
+          <label for="host">Host</label>
+          <input id="host" type="text" value="localhost" placeholder="100.64.x.y">
+        </div>
+        <div>
+          <label for="port">Port</label>
+          <input id="port" type="text" value="7680">
+        </div>
+      </div>
+      <label for="token">Auth Token</label>
+      <input id="token" type="password" placeholder="Your passphrase">
+      <div id="connect-error"></div>
+      <button type="submit" class="primary" style="width:100%;padding:10px">Connect</button>
+    </form>
+  </div>
+
+  <!-- Session Panel (shown after connect) -->
+  <div id="session-panel">
+    <div id="session-tabs"></div>
+    <div id="terminal-container">
+      <div id="empty-state">Click "+ New Session" to start a Claude session</div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.min.js"></script>
+  <script>
+    // ── State ──
+    let ws = null;
+    let authenticated = false;
+    const sessions = new Map(); // sessionId → { term, fitAddon, wrapper }
+    let activeSessionId = null;
+
+    // ── DOM refs ──
+    const connectPanel = document.getElementById('connect-panel');
+    const sessionPanel = document.getElementById('session-panel');
+    const connStatus = document.getElementById('conn-status');
+    const btnNewSession = document.getElementById('btn-new-session');
+    const btnDisconnect = document.getElementById('btn-disconnect');
+    const connectForm = document.getElementById('connect-form');
+    const connectError = document.getElementById('connect-error');
+    const sessionTabs = document.getElementById('session-tabs');
+    const terminalContainer = document.getElementById('terminal-container');
+    const emptyState = document.getElementById('empty-state');
+
+    // ── Binary protocol helpers ──
+    const BINARY_INPUT_TAG = 0x01;
+    const BINARY_OUTPUT_TAG = 0x02;
+
+    function uuidToBytes(uuid) {
+      const hex = uuid.replace(/-/g, '');
+      const bytes = new Uint8Array(16);
+      for (let i = 0; i < 16; i++) {
+        bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+      }
+      return bytes;
+    }
+
+    function bytesToUuid(bytes, offset = 0) {
+      const hex = Array.from(bytes.slice(offset, offset + 16))
+        .map(b => b.toString(16).padStart(2, '0')).join('');
+      return [hex.slice(0,8), hex.slice(8,12), hex.slice(12,16),
+              hex.slice(16,20), hex.slice(20,32)].join('-');
+    }
+
+    function buildInputFrame(sessionId, data) {
+      const encoder = new TextEncoder();
+      const dataBytes = encoder.encode(data);
+      const frame = new Uint8Array(17 + dataBytes.length);
+      frame[0] = BINARY_INPUT_TAG;
+      frame.set(uuidToBytes(sessionId), 1);
+      frame.set(dataBytes, 17);
+      return frame.buffer;
+    }
+
+    // ── Connect ──
+    connectForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const host = document.getElementById('host').value.trim();
+      const port = document.getElementById('port').value.trim();
+      const token = document.getElementById('token').value;
+
+      if (!host || !port || !token) {
+        showError('All fields are required.');
+        return;
+      }
+
+      showError('');
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      const url = `${proto}://${host}:${port}`;
+
+      try {
+        ws = new WebSocket(url);
+        ws.binaryType = 'arraybuffer';
+      } catch (err) {
+        showError('Invalid connection URL.');
+        return;
+      }
+
+      connStatus.textContent = 'Connecting...';
+      connStatus.className = 'status';
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ type: 'auth', token }));
+      };
+
+      ws.onmessage = (event) => {
+        if (event.data instanceof ArrayBuffer) {
+          handleBinaryFrame(new Uint8Array(event.data));
+          return;
+        }
+        const msg = JSON.parse(event.data);
+        handleMessage(msg);
+      };
+
+      ws.onclose = () => {
+        authenticated = false;
+        connStatus.textContent = 'Disconnected';
+        connStatus.className = 'status disconnected';
+        btnNewSession.disabled = true;
+        btnDisconnect.style.display = 'none';
+        // Don't reset UI if we have sessions — allow reconnect
+      };
+
+      ws.onerror = () => {
+        showError('Connection failed. Check host and port.');
+        connStatus.textContent = 'Disconnected';
+        connStatus.className = 'status disconnected';
+      };
+    });
+
+    function showError(msg) {
+      connectError.textContent = msg;
+      connectError.style.display = msg ? 'block' : 'none';
+    }
+
+    // ── Message handling ──
+    function handleMessage(msg) {
+      switch (msg.type) {
+        case 'auth_result':
+          if (msg.success) {
+            authenticated = true;
+            connStatus.textContent = 'Connected';
+            connStatus.className = 'status connected';
+            connectPanel.style.display = 'none';
+            sessionPanel.style.display = 'flex';
+            btnNewSession.disabled = false;
+            btnDisconnect.style.display = '';
+          } else {
+            showError(msg.error || 'Authentication failed.');
+            ws.close();
+          }
+          break;
+
+        case 'session_created':
+          createTerminal(msg.sessionId);
+          break;
+
+        case 'session_list':
+          // Could populate UI — for now just log
+          console.log('Sessions:', msg.sessions);
+          break;
+
+        case 'session_ended':
+          endSession(msg.sessionId, msg.exitCode);
+          break;
+
+        case 'error':
+          console.error('Server error:', msg.message);
+          break;
+      }
+    }
+
+    function handleBinaryFrame(data) {
+      if (data.length < 17) return;
+      const tag = data[0];
+      if (tag !== BINARY_OUTPUT_TAG) return;
+      const sessionId = bytesToUuid(data, 1);
+      const payload = data.slice(17);
+      const session = sessions.get(sessionId);
+      if (session) {
+        session.term.write(payload);
+      }
+    }
+
+    // ── Session management ──
+    btnNewSession.addEventListener('click', () => {
+      if (!authenticated || !ws) return;
+      // Use reasonable defaults; will resize after terminal mounts
+      ws.send(JSON.stringify({ type: 'create_session', cols: 80, rows: 24 }));
+    });
+
+    btnDisconnect.addEventListener('click', () => {
+      if (ws) ws.close();
+      // Cleanup all sessions
+      for (const [id, session] of sessions) {
+        session.term.dispose();
+        session.wrapper.remove();
+      }
+      sessions.clear();
+      activeSessionId = null;
+      sessionTabs.innerHTML = '';
+      emptyState.style.display = '';
+      connectPanel.style.display = '';
+      sessionPanel.style.display = 'none';
+      btnDisconnect.style.display = 'none';
+      btnNewSession.disabled = true;
+    });
+
+    function createTerminal(sessionId) {
+      emptyState.style.display = 'none';
+
+      // Create terminal
+      const term = new Terminal({
+        cursorBlink: true,
+        fontSize: 14,
+        fontFamily: "'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace",
+        theme: {
+          background: '#0d1117',
+          foreground: '#c9d1d9',
+          cursor: '#e94560',
+          selectionBackground: '#264f78',
+          black: '#484f58',
+          red: '#ff7b72',
+          green: '#3fb950',
+          yellow: '#d29922',
+          blue: '#58a6ff',
+          magenta: '#bc8cff',
+          cyan: '#39c5cf',
+          white: '#b1bac4',
+          brightBlack: '#6e7681',
+          brightRed: '#ffa198',
+          brightGreen: '#56d364',
+          brightYellow: '#e3b341',
+          brightBlue: '#79c0ff',
+          brightMagenta: '#d2a8ff',
+          brightCyan: '#56d4dd',
+          brightWhite: '#f0f6fc',
+        }
+      });
+
+      const fitAddon = new FitAddon.FitAddon();
+      term.loadAddon(fitAddon);
+
+      const webLinksAddon = new WebLinksAddon.WebLinksAddon();
+      term.loadAddon(webLinksAddon);
+
+      // Create wrapper div
+      const wrapper = document.createElement('div');
+      wrapper.className = 'terminal-wrapper';
+      wrapper.dataset.sessionId = sessionId;
+      terminalContainer.appendChild(wrapper);
+
+      term.open(wrapper);
+      fitAddon.fit();
+
+      // Send correct size to server
+      const dims = fitAddon.proposeDimensions();
+      if (dims) {
+        ws.send(JSON.stringify({
+          type: 'resize', sessionId,
+          cols: dims.cols, rows: dims.rows,
+        }));
+      }
+
+      // Handle input → server
+      term.onData((data) => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(buildInputFrame(sessionId, data));
+        }
+      });
+
+      // Handle resize
+      const resizeObserver = new ResizeObserver(() => {
+        fitAddon.fit();
+        const d = fitAddon.proposeDimensions();
+        if (d && ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'resize', sessionId,
+            cols: d.cols, rows: d.rows,
+          }));
+        }
+      });
+      resizeObserver.observe(wrapper);
+
+      sessions.set(sessionId, { term, fitAddon, wrapper, resizeObserver });
+
+      // Create tab
+      addTab(sessionId);
+      switchToSession(sessionId);
+    }
+
+    function endSession(sessionId, exitCode) {
+      const session = sessions.get(sessionId);
+      if (!session) return;
+
+      session.term.writeln(`\r\n\x1b[90m[Session ended with exit code ${exitCode}]\x1b[0m`);
+
+      // Remove tab after a short delay
+      setTimeout(() => {
+        session.term.dispose();
+        session.resizeObserver.disconnect();
+        session.wrapper.remove();
+        sessions.delete(sessionId);
+
+        const tab = document.querySelector(`.session-tab[data-id="${sessionId}"]`);
+        if (tab) tab.remove();
+
+        if (sessions.size === 0) {
+          activeSessionId = null;
+          emptyState.style.display = '';
+        } else if (activeSessionId === sessionId) {
+          // Switch to another session
+          const nextId = sessions.keys().next().value;
+          switchToSession(nextId);
+        }
+      }, 3000);
+    }
+
+    // ── Tabs ──
+    function addTab(sessionId) {
+      const tab = document.createElement('div');
+      tab.className = 'session-tab';
+      tab.dataset.id = sessionId;
+
+      const label = document.createElement('span');
+      label.textContent = `Claude #${sessions.size}`;
+      tab.appendChild(label);
+
+      const closeBtn = document.createElement('span');
+      closeBtn.className = 'close-tab';
+      closeBtn.textContent = '×';
+      closeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'kill_session', sessionId }));
+        }
+      });
+      tab.appendChild(closeBtn);
+
+      tab.addEventListener('click', () => switchToSession(sessionId));
+      sessionTabs.appendChild(tab);
+    }
+
+    function switchToSession(sessionId) {
+      activeSessionId = sessionId;
+
+      // Update tab styles
+      document.querySelectorAll('.session-tab').forEach(t => {
+        t.classList.toggle('active', t.dataset.id === sessionId);
+      });
+
+      // Show/hide terminal wrappers
+      for (const [id, session] of sessions) {
+        session.wrapper.classList.toggle('active', id === sessionId);
+        if (id === sessionId) {
+          session.fitAddon.fit();
+          session.term.focus();
+        }
+      }
+    }
+
+    // ── Global resize ──
+    window.addEventListener('resize', () => {
+      if (activeSessionId) {
+        const session = sessions.get(activeSessionId);
+        if (session) session.fitAddon.fit();
+      }
+    });
+
+    // ── Load saved connection info ──
+    const savedHost = localStorage.getItem('reb-host');
+    const savedPort = localStorage.getItem('reb-port');
+    if (savedHost) document.getElementById('host').value = savedHost;
+    if (savedPort) document.getElementById('port').value = savedPort;
+
+    // Save on connect
+    connectForm.addEventListener('submit', () => {
+      localStorage.setItem('reb-host', document.getElementById('host').value.trim());
+      localStorage.setItem('reb-port', document.getElementById('port').value.trim());
+    });
+  </script>
+</body>
+</html>
