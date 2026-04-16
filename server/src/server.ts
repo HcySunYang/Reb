@@ -31,6 +31,7 @@ export interface ServerConfig {
   port: number;
   authTokenHash: string;
   claudePath?: string;
+  copilotPath?: string;
   tlsCertPath?: string;
   tlsKeyPath?: string;
 }
@@ -39,6 +40,12 @@ export function startServer(config: ServerConfig): void {
   const auth = new AuthService(config.authTokenHash);
   const sessions = new SessionManager(config.claudePath);
   const clients = new Map<WebSocket, ClientState>();
+
+  // Supported CLI tools and their paths
+  const cliPaths: Record<string, string> = {
+    claude: config.claudePath || 'claude',
+    copilot: config.copilotPath || 'copilot',
+  };
 
   // Cleanup auth rate-limit entries every 5 minutes
   setInterval(() => auth.cleanup(), 300_000);
@@ -170,10 +177,19 @@ export function startServer(config: ServerConfig): void {
 
         switch (msg.type) {
           case 'create_session': {
-            const sessionId = sessions.create(msg.cols, msg.rows, msg.command);
+            // Resolve command: cli name → path, or custom command, or default to claude
+            let targetCommand: string;
+            if (msg.cli && cliPaths[msg.cli]) {
+              targetCommand = cliPaths[msg.cli];
+            } else if (msg.command) {
+              targetCommand = msg.command;
+            } else {
+              targetCommand = cliPaths['claude'];
+            }
+            const sessionId = sessions.create(msg.cols, msg.rows, targetCommand);
             state.subscribedSessions.add(sessionId);
-            ws.send(JSON.stringify({ type: 'session_created', sessionId }));
-            console.log(`[reb] Session ${sessionId} created for ${ip}`);
+            ws.send(JSON.stringify({ type: 'session_created', sessionId, command: targetCommand }));
+            console.log(`[reb] Session ${sessionId} (${targetCommand}) created for ${ip}`);
             break;
           }
 

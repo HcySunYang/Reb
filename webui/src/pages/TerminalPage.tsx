@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef } from 'react';
+import { useEffect, useCallback, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
@@ -9,6 +9,11 @@ import { useWebSocket } from '@/hooks/useWebSocket';
 import { SessionTabs } from '@/components/SessionTabs';
 import { TerminalView } from '@/components/TerminalView';
 
+const CLI_OPTIONS = [
+  { id: 'claude', label: 'Claude' },
+  { id: 'copilot', label: 'Copilot' },
+] as const;
+
 export function TerminalPage() {
   const { sessions, activeSessionId, addSession, removeSession, setActiveSession } =
     useSessionStore();
@@ -16,11 +21,12 @@ export function TerminalPage() {
   const { disconnect, createSession, killSession, sendInput, resizeSession } = useWebSocket();
   const navigate = useNavigate();
   const sessionCountRef = useRef(0);
+  const [showCliMenu, setShowCliMenu] = useState(false);
 
   // Handle session-created events from WebSocket
   useEffect(() => {
     const handler = (e: Event) => {
-      const { sessionId } = (e as CustomEvent).detail;
+      const { sessionId, command } = (e as CustomEvent).detail;
       sessionCountRef.current++;
 
       const term = new Terminal({
@@ -65,6 +71,7 @@ export function TerminalPage() {
         term,
         fitAddon,
         createdAt: new Date(),
+        command: command || 'claude',
       };
 
       addSession(session);
@@ -98,9 +105,13 @@ export function TerminalPage() {
     }
   }, [status, navigate]);
 
-  const handleNewSession = useCallback(() => {
-    createSession(80, 24);
-  }, [createSession]);
+  const handleNewSession = useCallback(
+    (cli: string) => {
+      createSession(80, 24, cli);
+      setShowCliMenu(false);
+    },
+    [createSession],
+  );
 
   const handleDisconnect = useCallback(() => {
     disconnect();
@@ -131,12 +142,30 @@ export function TerminalPage() {
           Connected
         </span>
         <div className="flex-1" />
-        <button
-          onClick={handleNewSession}
-          className="rounded-md border border-reb-border bg-reb-panel px-3 py-1.5 text-xs text-gray-200 hover:bg-reb-border transition-colors"
-        >
-          + New Session
-        </button>
+        <div className="relative">
+          <button
+            onClick={() => setShowCliMenu((v) => !v)}
+            className="rounded-md border border-reb-border bg-reb-panel px-3 py-1.5 text-xs text-gray-200 hover:bg-reb-border transition-colors"
+          >
+            + New Session ▾
+          </button>
+          {showCliMenu && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setShowCliMenu(false)} />
+              <div className="absolute right-0 top-full z-20 mt-1 min-w-[140px] rounded-md border border-reb-border bg-reb-panel shadow-lg">
+                {CLI_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.id}
+                    onClick={() => handleNewSession(opt.id)}
+                    className="block w-full px-3 py-2 text-left text-xs text-gray-200 hover:bg-reb-border transition-colors first:rounded-t-md last:rounded-b-md"
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
         <button
           onClick={handleDisconnect}
           className="rounded-md border border-red-800 px-3 py-1.5 text-xs text-red-400 hover:bg-red-950 transition-colors"
@@ -157,7 +186,7 @@ export function TerminalPage() {
       <div className="relative flex-1 bg-black">
         {sessionList.length === 0 ? (
           <div className="flex h-full items-center justify-center text-gray-600">
-            Click "+ New Session" to start a Claude session
+            Click "+ New Session" to start a Claude or Copilot session
           </div>
         ) : (
           sessionList.map((session) => (

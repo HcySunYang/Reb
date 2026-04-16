@@ -75,9 +75,9 @@ export function useWebSocket() {
     }
   }, []);
 
-  const createSession = useCallback((cols: number, rows: number) => {
+  const createSession = useCallback((cols: number, rows: number, cli?: string) => {
     if (globalWs && globalWs.readyState === WebSocket.OPEN) {
-      globalWs.send(JSON.stringify({ type: 'create_session', cols, rows }));
+      globalWs.send(JSON.stringify({ type: 'create_session', cols, rows, cli }));
     }
   }, []);
 
@@ -112,7 +112,9 @@ function handleMessage(msg: ServerMessage) {
     case 'session_created':
       // Terminal creation handled by the TerminalPage via store subscription
       window.dispatchEvent(
-        new CustomEvent('reb:session-created', { detail: { sessionId: msg.sessionId } }),
+        new CustomEvent('reb:session-created', {
+          detail: { sessionId: msg.sessionId, command: msg.command },
+        }),
       );
       break;
 

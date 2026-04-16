@@ -45,6 +45,7 @@ export interface AuthResultMessage {
 export interface SessionCreatedMessage {
   type: 'session_created';
   sessionId: string;
+  command: string;
 }
 
 export interface SessionListMessage {

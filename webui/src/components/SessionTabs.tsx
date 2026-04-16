@@ -1,5 +1,10 @@
 import type { Session } from '@/stores/sessionStore';
 
+function cliDisplayName(command: string): string {
+  if (command.includes('copilot')) return 'Copilot';
+  return 'Claude';
+}
+
 interface Props {
   sessions: Session[];
   activeId: string | null;
@@ -22,7 +27,7 @@ export function SessionTabs({ sessions, activeId, onSelect, onClose }: Props) {
               : 'text-gray-400 hover:text-gray-200'
           }`}
         >
-          <span>Claude #{i + 1}</span>
+          <span>{cliDisplayName(session.command)} #{i + 1}</span>
           <button
             onClick={(e) => {
               e.stopPropagation();

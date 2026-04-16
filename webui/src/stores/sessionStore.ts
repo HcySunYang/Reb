@@ -7,6 +7,7 @@ export interface Session {
   term: Terminal;
   fitAddon: FitAddon;
   createdAt: Date;
+  command: string;
 }
 
 interface SessionState {

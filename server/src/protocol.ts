@@ -13,7 +13,8 @@ export interface CreateSessionMessage {
   type: 'create_session';
   cols: number;
   rows: number;
-  command?: string; // defaults to 'claude'
+  cli?: string;     // 'claude' | 'copilot' — resolved server-side
+  command?: string;  // custom command override
 }
 
 export interface InputMessage {
@@ -57,6 +58,7 @@ export interface AuthResultMessage {
 export interface SessionCreatedMessage {
   type: 'session_created';
   sessionId: string;
+  command: string;
 }
 
 export interface OutputMessage {
